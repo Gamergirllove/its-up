@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050508">
+<title>POLY BOT</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #050508;
+    --bg2:      #0d0d14;
+    --bg3:      #14141f;
+    --border:   #1e1e2e;
+    --green:    #00ff88;
+    --red:      #ff3355;
+    --yellow:   #ffd700;
+    --cyan:     #00d4ff;
+    --text:     #e0e0f0;
+    --muted:    #555570;
+    --mono:     'Space Mono', monospace;
+    --display:  'Bebas Neue', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; overflow-x: hidden; }
+
+  /* noise overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0; opacity: 0.4;
+  }
+
+  /* ─── SETUP SCREEN ─── */
+  #setup-screen {
+    position: fixed; inset: 0; z-index: 100;
+    background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px;
+    animation: fadeIn .4s ease;
+  }
+  #setup-screen.hidden { display: none; }
+
+  .setup-logo {
+    font-family: var(--display);
+    font-size: clamp(52px, 14vw, 80px);
+    letter-spacing: 8px;
+    color: var(--green);
+    text-shadow: 0 0 40px rgba(0,255,136,0.4);
+    margin-bottom: 6px;
+  }
+  .setup-sub {
+    font-size: 11px; color: var(--muted);
+    letter-spacing: 4px; text-transform: uppercase;
+    margin-bottom: 40px;
+  }
+
+  .setup-card {
+    width: 100%; max-width: 420px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 28px;
+  }
+  .setup-card h2 {
+    font-family: var(--display);
+    font-size: 22px; letter-spacing: 3px;
+    color: var(--cyan); margin-bottom: 24px;
+  }
+  .field-group { margin-bottom: 18px; }
+  .field-label {
+    display: block;
+    font-size: 9px; letter-spacing: 3px;
+    color: var(--muted); margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .field-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .field-input:focus { border-color: var(--green); }
+  .field-input::placeholder { color: var(--muted); font-size: 11px; }
+
+  .hint { font-size: 10px; color: var(--muted); margin-top: 5px; }
+  .hint a { color: var(--cyan); text-decoration: none; }
+
+  .btn-primary {
+    width: 100%; margin-top: 24px;
+    background: var(--green);
+    color: #000;
+    border: none; border-radius: 2px;
+    font-family: var(--display);
+    font-size: 18px; letter-spacing: 3px;
+    padding: 14px;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+  .btn-primary:active { transform: scale(.98); opacity: .9; }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+
+  .error-msg {
+    font-size: 11px; color: var(--red);
+    margin-top: 12px; text-align: center;
+    min-height: 16px;
+  }
+
+  /* ─── DASHBOARD ─── */
+  #dashboard { position: relative; z-index: 1; padding-bottom: 80px; }
+  #dashboard.hidden { display: none; }
+
+  /* header */
+  .header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(5,5,8,.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+  }
+  .header-logo {
+    font-family: var(--display);
+    font-size: 28px; letter-spacing: 4px;
+    color: var(--green);
+    text-shadow: 0 0 20px rgba(0,255,136,0.3);
+  }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+    transition: background .3s;
+  }
+  .status-dot.live {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* toggle btn */
+  #toggle-btn {
+    font-family: var(--display);
+    font-size: 14px; letter-spacing: 2px;
+    padding: 7px 18px;
+    border-radius: 2px;
+    border: 1px solid var(--green);
+    background: transparent;
+    color: var(--green);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  #toggle-btn.running {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+  }
+  #toggle-btn:active { transform: scale(.96); }
+
+  /* stats row */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-cell {
+    background: var(--bg);
+    padding: 14px 16px;
+  }
+  .stat-label { font-size: 9px; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .stat-value {
+    font-family: var(--display);
+    font-size: 28px; letter-spacing: 2px;
+    line-height: 1;
+  }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red   { color: var(--red); }
+  .stat-value.yellow{ color: var(--yellow); }
+  .stat-value.cyan  { color: var(--cyan); }
+
+  /* pnl bar */
+  .pnl-bar-wrap { padding: 14px 16px 0; }
+  .pnl-bar-label { font-size: 9px; color: var(--muted); letter-spacing: 3px; margin-bottom: 8px; }
+  .pnl-bar-track {
+    height: 4px;
+    background: var(--bg3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .pnl-bar-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 2px;
+    width: 0%;
+    transition: width .5s ease, background .3s;
+  }
+  .pnl-bar-fill.neg { background: var(--red); }
+
+  /* sections */
+  .section { margin: 16px; }
+  .section-title {
+    font-size: 9px; letter-spacing: 4px;
+    color: var(--muted); text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::after {
+    content: ''; flex: 1;
+    height: 1px; background: var(--border);
+  }
+
+  /* position cards */
+  .position-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px;
+    margin-bottom: 8px;
+    animation: slideIn .3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  @keyframes slideIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+
+  .position-card::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--green);
+  }
+  .position-card.loss::before { background: var(--red); }
+  .position-card.pending::before { background: var(--muted); }
+
+  .pos-question {
+    font-size: 11px; color: var(--text);
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+  .pos-grid {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    gap: 8px;
+  }
+  .pos-field label {
+    display: block;
+    font-size: 8px; color: var(--muted);
+    letter-spacing: 2px; margin-bottom: 2px;
+  }
+  .pos-field span {
+    font-size: 13px; color: var(--text);
+  }
+  .pos-pnl {
+    font-family: var(--display);
+    font-size: 20px;
+  }
+  .pos-pnl.pos { color: var(--green); }
+  .pos-pnl.neg { color: var(--red); }
+
+  .pos-progress {
+    margin-top: 10px;
+    height: 3px;
+    background: var(--bg3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .pos-progress-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 2px;
+    transition: width .5s;
+  }
+  .pos-progress-fill.neg { background: var(--red); }
+
+  .badge {
+    display: inline-block;
+    font-size: 9px; letter-spacing: 2px;
+    padding: 2px 8px; border-radius: 2px;
+    margin-bottom: 8px;
+  }
+  .badge.yes { background: rgba(0,212,255,.15); color: var(--cyan); border: 1px solid rgba(0,212,255,.3); }
+  .badge.no  { background: rgba(255,51,85,.15);  color: var(--red);  border: 1px solid rgba(255,51,85,.3); }
+  .badge.pending { background: rgba(85,85,112,.15); color: var(--muted); border: 1px solid var(--border); }
+
+  /* trade feed */
+  .trade-item {
+    display: flex; align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeIn .3s ease;
+  }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .trade-item:last-child { border-bottom: none; }
+
+  .trade-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .trade-body { flex: 1; min-width: 0; }
+  .trade-q {
+    font-size: 11px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 3px;
+  }
+  .trade-meta { font-size: 10px; color: var(--muted); }
+  .trade-pnl {
+    font-family: var(--display);
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .trade-pnl.pos { color: var(--green); }
+  .trade-pnl.neg { color: var(--red); }
+
+  /* log */
+  #log-area {
+    font-size: 10px; color: var(--muted);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px;
+    max-height: 160px;
+    overflow-y: auto;
+    line-height: 1.7;
+  }
+  .log-line { display: block; }
+  .log-line.green { color: var(--green); }
+  .log-line.red   { color: var(--red); }
+  .log-line.cyan  { color: var(--cyan); }
+
+  /* settings cog */
+  .settings-btn {
+    position: fixed; bottom: 20px; right: 20px; z-index: 90;
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all .2s;
+  }
+  .settings-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 0;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 2px;
+  }
+
+  @media (min-width: 600px) {
+    .stats-row { grid-template-columns: repeat(4,1fr); }
+    .setup-card { padding: 36px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ SETUP SCREEN ═══════════════════════════════════════════════════════ -->
+<div id="setup-screen">
+  <div class="setup-logo">POLY BOT</div>
+  <div class="setup-sub">Automated Underdog Trading</div>
+
+  <div class="setup-card">
+    <h2>CONNECT WALLET</h2>
+
+    <div class="field-group">
+      <label class="field-label">Polygon Private Key</label>
+      <input class="field-input" type="password" id="f-privkey" placeholder="0x...your polygon wallet key">
+      <p class="hint">Never shared. Stored in session only. <a href="https://docs.polymarket.com" target="_blank">Docs ↗</a></p>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Polymarket API Key</label>
+      <input class="field-input" type="text" id="f-apikey" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+      <p class="hint">Get from <a href="https://polymarket.com" target="_blank">polymarket.com</a> → Profile → API Keys</p>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">API Secret</label>
+      <input class="field-input" type="password" id="f-apisecret" placeholder="API secret">
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">API Passphrase</label>
+      <input class="field-input" type="password" id="f-passphrase" placeholder="API passphrase">
+    </div>
+
+    <button class="btn-primary" id="connect-btn" onclick="handleConnect()">CONNECT</button>
+    <div class="error-msg" id="setup-error"></div>
+  </div>
+</div>
+
+<!-- ═══ DASHBOARD ══════════════════════════════════════════════════════════ -->
+<div id="dashboard" class="hidden">
+
+  <div class="header">
+    <div class="header-logo">POLY BOT</div>
+    <div class="header-right">
+      <div class="status-dot" id="status-dot"></div>
+      <button id="toggle-btn" onclick="toggleBot()">START</button>
+    </div>
+  </div>
+
+  <!-- stats -->
+  <div class="stats-row">
+    <div class="stat-cell">
+      <div class="stat-label">Total P&L</div>
+      <div class="stat-value green" id="s-pnl">$0.00</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Win Rate</div>
+      <div class="stat-value cyan" id="s-wr">—</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Open Bets</div>
+      <div class="stat-value yellow" id="s-open">0</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Total Bets</div>
+      <div class="stat-value" id="s-total">0</div>
+    </div>
+  </div>
+
+  <div class="pnl-bar-wrap">
+    <div class="pnl-bar-label">SESSION PERFORMANCE</div>
+    <div class="pnl-bar-track"><div class="pnl-bar-fill" id="pnl-bar"></div></div>
+  </div>
+
+  <!-- open positions -->
+  <div class="section">
+    <div class="section-title">Open Positions</div>
+    <div id="positions-wrap">
+      <div class="empty-state" id="pos-empty">NO ACTIVE POSITIONS</div>
+    </div>
+  </div>
+
+  <!-- trade feed -->
+  <div class="section">
+    <div class="section-title">Trade History</div>
+    <div id="trades-wrap">
+      <div class="empty-state" id="trades-empty">NO CLOSED TRADES YET</div>
+    </div>
+  </div>
+
+  <!-- log -->
+  <div class="section">
+    <div class="section-title">Activity Log</div>
+    <div id="log-area"></div>
+  </div>
+
+</div>
+
+<button class="settings-btn" id="settings-btn" onclick="showSetup()" title="Settings">⚙</button>
+
+<script>
+const API = '';  // same origin
+let running = false;
+let es = null;  // EventSource
+
+// ─── connect ──────────────────────────────────────────────────────────────
+
+async function handleConnect() {
+  const btn = document.getElementById('connect-btn');
+  const err = document.getElementById('setup-error');
+  err.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'CONNECTING...';
+
+  const body = {
+    private_key:    document.getElementById('f-privkey').value.trim(),
+    api_key:        document.getElementById('f-apikey').value.trim(),
+    api_secret:     document.getElementById('f-apisecret').value.trim(),
+    api_passphrase: document.getElementById('f-passphrase').value.trim(),
+  };
+
+  if (Object.values(body).some(v => !v)) {
+    err.textContent = 'All fields required.';
+    btn.disabled = false; btn.textContent = 'CONNECT';
+    return;
+  }
+
+  try {
+    const r = await fetch(`${API}/api/config`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Config failed');
+
+    document.getElementById('setup-screen').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    document.getElementById('settings-btn').style.display = 'flex';
+    connectSSE();
+    addLog('Credentials loaded ✓', 'green');
+  } catch(e) {
+    err.textContent = e.message;
+    btn.disabled = false; btn.textContent = 'CONNECT';
+  }
+}
+
+function showSetup() {
+  document.getElementById('setup-screen').classList.remove('hidden');
+  document.getElementById('setup-screen').style.background = 'rgba(5,5,8,.97)';
+}
+
+// ─── SSE ──────────────────────────────────────────────────────────────────
+
+function connectSSE() {
+  if (es) es.close();
+  es = new EventSource(`${API}/api/stream`);
+  es.onmessage = (e) => {
+    try { handleEvent(JSON.parse(e.data)); } catch(_) {}
+  };
+  es.onerror = () => {
+    addLog('Stream disconnected. Reconnecting...', 'red');
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+function handleEvent(ev) {
+  const { type, data } = ev;
+  if (type === 'snapshot') renderSnapshot(data);
+  else if (type === 'new_bet') addLog(`NEW BET → ${data.side} on "${data.question}" @ ${data.entry_price}`, 'cyan');
+  else if (type === 'trade_closed') {
+    addLog(`CLOSED [${data.result}] ${data.pnl >= 0 ? '+' : ''}$${data.pnl.toFixed(4)} — ${data.question}`, data.pnl >= 0 ? 'green' : 'red');
+  }
+  else if (type === 'status') addLog(data.msg, data.running ? 'green' : 'red');
+}
+
+// ─── render snapshot ──────────────────────────────────────────────────────
+
+function renderSnapshot(d) {
+  running = d.running;
+
+  // header status
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot' + (running ? ' live' : '');
+
+  const btn = document.getElementById('toggle-btn');
+  btn.textContent = running ? 'STOP' : 'START';
+  btn.className   = running ? 'running' : '';
+
+  // stats
+  const pnl = d.total_pnl;
+  const pnlEl = document.getElementById('s-pnl');
+  pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(4);
+  pnlEl.className   = 'stat-value ' + (pnl >= 0 ? 'green' : 'red');
+
+  const wr = d.total_bets > 0 ? Math.round((d.wins / (d.wins + d.losses || 1)) * 100) : null;
+  document.getElementById('s-wr').textContent    = wr !== null ? wr + '%' : '—';
+  document.getElementById('s-open').textContent  = d.open_count;
+  document.getElementById('s-total').textContent = d.total_bets;
+
+  // pnl bar (normalize to ±$5 range)
+  const barPct = Math.min(Math.abs(pnl) / 5 * 100, 100);
+  const bar = document.getElementById('pnl-bar');
+  bar.style.width = barPct + '%';
+  bar.className   = 'pnl-bar-fill' + (pnl < 0 ? ' neg' : '');
+
+  // positions
+  renderPositions(d.positions);
+
+  // trades
+  renderTrades(d.closed_trades);
+}
+
+function renderPositions(positions) {
+  const wrap  = document.getElementById('positions-wrap');
+  const empty = document.getElementById('pos-empty');
+
+  if (!positions.length) {
+    empty.style.display = 'block';
+    // remove old cards
+    wrap.querySelectorAll('.position-card').forEach(c => c.remove());
+    return;
+  }
+  empty.style.display = 'none';
+
+  const existing = {};
+  wrap.querySelectorAll('.position-card').forEach(c => { existing[c.dataset.mid] = c; });
+
+  positions.forEach(pos => {
+    const pnl = pos.pnl;
+    const isPending = !pos.filled;
+    const pct = pos.entry_price > 0
+      ? Math.max(0, Math.min(100, ((pos.current_price - pos.sl_price) / (pos.tp_price - pos.sl_price)) * 100))
+      : 0;
+
+    const html = `
+      <div class="badge ${isPending ? 'pending' : pos.side.toLowerCase()}">${isPending ? 'PENDING FILL' : pos.side}</div>
+      <div class="pos-question">${pos.question}</div>
+      <div class="pos-grid">
+        <div class="pos-field"><label>ENTRY</label><span>${pos.entry_price}</span></div>
+        <div class="pos-field"><label>CURRENT</label><span>${pos.current_price}</span></div>
+        <div class="pos-field"><label>P&L</label><span class="pos-pnl ${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(4)}</span></div>
+        <div class="pos-field"><label>TP</label><span>${pos.tp_price}</span></div>
+        <div class="pos-field"><label>SL</label><span>${pos.sl_price}</span></div>
+        <div class="pos-field"><label>SHARES</label><span>${pos.shares}</span></div>
+      </div>
+      <div class="pos-progress"><div class="pos-progress-fill ${pnl < 0 ? 'neg' : ''}" style="width:${pct}%"></div></div>
+    `;
+
+    if (existing[pos.market_id]) {
+      existing[pos.market_id].innerHTML = html;
+      existing[pos.market_id].className = `position-card ${isPending ? 'pending' : pnl < 0 ? 'loss' : ''}`;
+    } else {
+      const card = document.createElement('div');
+      card.className = `position-card ${isPending ? 'pending' : pnl < 0 ? 'loss' : ''}`;
+      card.dataset.mid = pos.market_id;
+      card.innerHTML = html;
+      wrap.appendChild(card);
+    }
+    delete existing[pos.market_id];
+  });
+
+  // remove stale
+  Object.values(existing).forEach(c => c.remove());
+}
+
+function renderTrades(trades) {
+  const wrap  = document.getElementById('trades-wrap');
+  const empty = document.getElementById('trades-empty');
+
+  if (!trades.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  const reversed = [...trades].reverse().slice(0, 30);
+  wrap.innerHTML = reversed.map(t => `
+    <div class="trade-item">
+      <div class="trade-icon">${t.result === 'TP' ? '✅' : '🔴'}</div>
+      <div class="trade-body">
+        <div class="trade-q">${t.question}</div>
+        <div class="trade-meta">${t.side} · entry ${t.entry_price} → exit ${t.exit_price} · ${t.ts.slice(11,19)} UTC</div>
+      </div>
+      <div class="trade-pnl ${t.pnl >= 0 ? 'pos' : 'neg'}">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(4)}</div>
+    </div>
+  `).join('');
+}
+
+// ─── bot control ──────────────────────────────────────────────────────────
+
+async function toggleBot() {
+  const endpoint = running ? '/api/stop' : '/api/start';
+  try {
+    const r = await fetch(`${API}${endpoint}`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    addLog(d.msg, 'cyan');
+  } catch(e) {
+    addLog('Error: ' + e.message, 'red');
+  }
+}
+
+// ─── log ──────────────────────────────────────────────────────────────────
+
+function addLog(msg, cls = '') {
+  const el  = document.getElementById('log-area');
+  const now = new Date().toTimeString().slice(0,8);
+  const line = document.createElement('span');
+  line.className = 'log-line ' + cls;
+  line.textContent = `[${now}] ${msg}`;
+  el.appendChild(line);
+  el.appendChild(document.createElement('br'));
+  el.scrollTop = el.scrollHeight;
+  // cap at 200 lines
+  while (el.children.length > 400) el.removeChild(el.firstChild);
+}
+
+// hide settings on load
+document.getElementById('settings-btn').style.display = 'none';
+</script>
+</body>
+</html>
