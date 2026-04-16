@@ -320,6 +320,64 @@
   .trade-pnl.pos { color: var(--green); }
   .trade-pnl.neg { color: var(--red); }
 
+  /* scanner panel */
+  .scanner-meta {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 12px;
+    font-size: 10px; color: var(--muted);
+  }
+  .scanner-meta span { letter-spacing: 1px; }
+  .scanner-meta strong { color: var(--text); }
+
+  .market-row {
+    display: grid;
+    grid-template-columns: 1fr 52px 52px 64px 80px;
+    gap: 6px;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+  }
+  .market-row:last-child { border-bottom: none; }
+  .market-row .mq {
+    color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .market-row .mp { text-align: right; color: var(--muted); font-size: 10px; }
+  .market-row .mg {
+    text-align: right;
+    font-family: var(--display);
+    font-size: 13px;
+  }
+  .market-row .mg.hot  { color: var(--green); }
+  .market-row .mg.warm { color: var(--yellow); }
+  .market-row .mg.cold { color: var(--muted); }
+  .market-row .ms {
+    text-align: right;
+    font-size: 9px; letter-spacing: 1px;
+  }
+  .ms.qualify  { color: var(--green); }
+  .ms.nope     { color: var(--muted); }
+  .market-header {
+    display: grid;
+    grid-template-columns: 1fr 52px 52px 64px 80px;
+    gap: 6px;
+    padding: 0 0 6px;
+    font-size: 8px; letter-spacing: 2px; color: var(--muted);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .market-header span { text-align: right; }
+  .market-header span:first-child { text-align: left; }
+  #scanner-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
   /* log */
   #log-area {
     font-size: 10px; color: var(--muted);
@@ -436,6 +494,17 @@
     <div class="pnl-bar-track"><div class="pnl-bar-fill" id="pnl-bar"></div></div>
   </div>
 
+  <!-- scanner -->
+  <div class="section">
+    <div class="section-title">Market Scanner</div>
+    <div class="scanner-meta" id="scanner-meta">
+      <span>Waiting for first scan...</span>
+    </div>
+    <div id="scanner-wrap">
+      <div class="empty-state">Bot not started yet</div>
+    </div>
+  </div>
+
   <!-- open positions -->
   <div class="section">
     <div class="section-title">Open Positions</div>
@@ -531,12 +600,66 @@ function connectSSE() {
 function handleEvent(ev) {
   const { type, data } = ev;
   if (type === 'snapshot') renderSnapshot(data);
+  else if (type === 'scan_result') renderScanner(data);
   else if (type === 'new_bet') addLog(`NEW BET → ${data.side} on "${data.question}" @ ${data.entry_price}`, 'cyan');
   else if (type === 'trade_closed') {
     addLog(`CLOSED [${data.result}] ${data.pnl >= 0 ? '+' : ''}$${data.pnl.toFixed(4)} — ${data.question}`, data.pnl >= 0 ? 'green' : 'red');
   }
   else if (type === 'status') addLog(data.msg, data.running ? 'green' : 'red');
 }
+
+function renderScanner(info) {
+  const meta = document.getElementById('scanner-meta');
+  const wrap = document.getElementById('scanner-wrap');
+  const threshold = info.threshold ?? 0.50;
+  const best = info.top_markets && info.top_markets.length ? info.top_markets[0].gap : 0;
+
+  meta.innerHTML = `
+    <span>Markets fetched: <strong>${info.markets_fetched}</strong></span>
+    <span>With prices: <strong>${info.markets_priced}</strong></span>
+    <span>Threshold: <strong>${threshold.toFixed(2)} gap</strong></span>
+    <span>Best gap found: <strong style="color:${best >= threshold ? 'var(--green)' : best > threshold * 0.5 ? 'var(--yellow)' : 'var(--muted)'}">${best.toFixed(4)}</strong></span>
+    <span style="color:var(--muted)">Updated ${new Date().toTimeString().slice(0,8)}</span>
+  `;
+
+  if (!info.top_markets || !info.top_markets.length) {
+    wrap.innerHTML = '<div class="empty-state">No priced markets found</div>';
+    return;
+  }
+
+  const reason = best < threshold
+    ? `No bets placed — best gap is <strong style="color:var(--yellow)">${best.toFixed(4)}</strong>, needs <strong>${threshold.toFixed(2)}</strong>. Markets shown below sorted by gap.`
+    : `<span style="color:var(--green)">Qualifying markets found!</span> Placing bets...`;
+
+  wrap.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">${reason}</div>
+    <div class="market-header">
+      <span>Market</span><span>YES</span><span>NO</span><span>Gap</span><span>Status</span>
+    </div>
+    ${info.top_markets.map(m => {
+      const pct = Math.min(m.gap / threshold * 100, 100);
+      const gapClass = m.gap >= threshold ? 'hot' : m.gap >= threshold * 0.5 ? 'warm' : 'cold';
+      const status = m.qualifies
+        ? '<span class="ms qualify">✓ BET</span>'
+        : `<span class="ms nope">${(pct).toFixed(0)}% of threshold</span>`;
+      return `
+        <div class="market-row">
+          <div class="mq" title="${m.question}">${m.question}</div>
+          <div class="mp">${m.yes_mid.toFixed(3)}</div>
+          <div class="mp">${m.no_mid.toFixed(3)}</div>
+          <div class="mg ${gapClass}">${m.gap.toFixed(3)}</div>
+          ${status}
+        </div>`;
+    }).join('')}
+  `;
+}
+
+// also render scanner data embedded in snapshot
+const _origRenderSnapshot = renderSnapshot;
+renderSnapshot = function(d) {
+  _origRenderSnapshot(d);
+  if (d.last_scan) renderScanner(d.last_scan);
+};
 
 // ─── render snapshot ──────────────────────────────────────────────────────
 

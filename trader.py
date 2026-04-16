@@ -14,7 +14,8 @@ import time
 import requests
 from dataclasses import dataclass, field
 from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import ApiCreds, OrderArgs, OrderType, Side
+from py_clob_client.clob_types import ApiCreds, OrderArgs, OrderType
+from py_clob_client.order_builder.constants import BUY, SELL
 
 from config import (
     PRIVATE_KEY, API_KEY, API_SECRET, API_PASSPHRASE,
@@ -95,7 +96,7 @@ class Trader:
                 token_id=token_id,
                 price=round(entry_price, 4),
                 size=round(BET_SIZE, 2),
-                side=Side.BUY,
+                side=BUY,
             )
             signed = self.client.create_order(order_args)
             resp   = self.client.post_order(signed, OrderType.GTC)
@@ -137,7 +138,7 @@ class Trader:
                 token_id=pos.token_id,
                 price=round(sell_price, 4),
                 size=round(pos.shares, 4),
-                side=Side.SELL,
+                side=SELL,
             )
             signed = self.client.create_order(order_args)
             self.client.post_order(signed, OrderType.GTC)
