@@ -62,33 +62,32 @@ def _get_mid(token_id: str) -> float | None:
         return None
 
 
-def scan_for_opportunities(open_market_ids: set) -> list[dict]:
+def scan_for_opportunities(open_market_ids: set) -> tuple[list[dict], dict]:
     """
-    Returns list of dicts:
-        {
-            "market_id": str,
-            "question": str,
-            "token_id": str,      # underdog token (YES or NO)
-            "side": "YES"|"NO",
-            "entry_price": float, # underdog mid price
-            "discrepancy": float,
-        }
+    Returns (opportunities, scan_info).
+
+    opportunities — list of dicts that meet DISCREPANCY_MIN:
+        { market_id, question, token_id, side, entry_price, discrepancy }
+
+    scan_info — diagnostic dict:
+        { markets_fetched, markets_priced, top_markets (up to 20, sorted by gap desc) }
+        top_markets entries: { question, yes_mid, no_mid, gap, qualifies }
     """
     markets = _get_live_sports_markets()
     log.info(f"Scanning {len(markets)} sports markets...")
 
     opportunities = []
+    top_markets   = []
 
     for m in markets:
         market_id = m.get("conditionId") or m.get("id", "")
         if market_id in open_market_ids:
-            continue  # already have a position here
+            continue
 
         tokens = m.get("tokens", [])
         if len(tokens) < 2:
             continue
 
-        # Identify YES / NO tokens
         yes_token = next((t for t in tokens if t.get("outcome", "").upper() == "YES"), tokens[0])
         no_token  = next((t for t in tokens if t.get("outcome", "").upper() == "NO"),  tokens[1])
 
@@ -101,10 +100,19 @@ def scan_for_opportunities(open_market_ids: set) -> list[dict]:
             continue
 
         discrepancy = abs(yes_mid - no_mid)
-        if discrepancy < DISCREPANCY_MIN:
+        qualifies   = discrepancy >= DISCREPANCY_MIN
+
+        top_markets.append({
+            "question":  m.get("question", "Unknown")[:80],
+            "yes_mid":   round(yes_mid, 4),
+            "no_mid":    round(no_mid, 4),
+            "gap":       round(discrepancy, 4),
+            "qualifies": qualifies,
+        })
+
+        if not qualifies:
             continue
 
-        # Underdog = lower mid price
         if yes_mid < no_mid:
             underdog_token = yes_token["token_id"]
             underdog_side  = "YES"
@@ -128,4 +136,13 @@ def scan_for_opportunities(open_market_ids: set) -> list[dict]:
             f"gap={discrepancy:.3f} | bet={underdog_side}@{entry_price:.3f}"
         )
 
-    return opportunities
+    top_markets.sort(key=lambda x: x["gap"], reverse=True)
+
+    scan_info = {
+        "markets_fetched": len(markets),
+        "markets_priced":  len(top_markets),
+        "top_markets":     top_markets[:20],
+        "threshold":       DISCREPANCY_MIN,
+    }
+
+    return opportunities, scan_info

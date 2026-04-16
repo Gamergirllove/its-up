@@ -39,6 +39,8 @@ _state = {
     "wins":          0,
     "losses":        0,
     "start_time":    None,
+    "last_scan":     None,        # scan_info dict from most recent cycle
+    "scan_count":    0,
 }
 _state_lock  = threading.Lock()
 _event_queue: queue.Queue = queue.Queue(maxsize=200)
@@ -87,6 +89,8 @@ def _snapshot() -> dict:
             "losses":        _state["losses"],
             "open_count":    len(positions),
             "uptime":        int(time.time() - _state["start_time"]) if _state["start_time"] else 0,
+            "last_scan":     _state["last_scan"],
+            "scan_count":    _state["scan_count"],
         }
 
 
@@ -123,7 +127,11 @@ def _bot_loop(creds: dict):
 
         # scan for new
         if _trader.open_count < MAX_OPEN_BETS:
-            opps = scan_for_opportunities(_trader.open_market_ids)
+            opps, scan_info = scan_for_opportunities(_trader.open_market_ids)
+            with _state_lock:
+                _state["last_scan"]  = scan_info
+                _state["scan_count"] += 1
+            _push_event("scan_result", scan_info)
             for opp in opps[:MAX_OPEN_BETS - _trader.open_count]:
                 pos = _trader.open_position(opp)
                 if pos:
